@@ -1,15 +1,19 @@
 #ifndef OCTOMINX_H
 #define OCTOMINX_H
+#include <algorithm>
 #include <array>
 #include <cstddef>
-#include <iostream>
 #include <ostream>
 #include <string_view>
-#include <unordered_map>
+#include <utility>
+#include <vector>
 enum Center {
     UBL,
     URB,
     ULR,
+    NLB,
+    NDL,
+    NBD,
     LUN,
     LFU,
     LNF,
@@ -25,9 +29,6 @@ enum Center {
     BUT,
     BNU,
     BTN,
-    NLB,
-    NDL,
-    NBD,
     DFN,
     DTF,
     DNT,
@@ -64,12 +65,30 @@ using Edges = std::array<enum Edge, edgeCount>;
 
 using Corners = std::array<CornerPiece, cornerCount>;
 
+
 struct Move {
     enum Face face;
     enum Direction direction;
+    Move(const Face f, const Direction d) : face(f), direction(d) {}
+    void reverse() {
+        direction = direction == CW ? CCW : CW;
+    }
+    bool operator==(const Move &other) const {
+        return face == other.face && direction == other.direction;
+    } // TODO: measure if using a hash is faster
+};
+const std::array<Move, moveCount> moves = {
+    Move{U, CW}, Move{U, CCW}, Move{N, CW}, Move{N, CCW},Move{L, CW}, Move{L, CCW}, Move{F, CW}, Move{F, CCW},
+    Move{R, CW}, Move{R, CCW}, Move{T, CW}, Move{T, CCW}, Move{B, CW}, Move{B, CCW},
+     Move{D, CW}, Move{D, CCW}};
+
+using MoveList = std::vector<Move>;
+
+struct CenterMove {
+    Center center;
+    Move move;
 };
 
-Move intToMove(int i);
 
 struct CenterFacePieces {
     std::array<Center, 3> centers;
@@ -77,28 +96,35 @@ struct CenterFacePieces {
 
     static const std::array<Center, centerCount * moveCount> centerTargetArray;
     static const std::array<Edge, edgeCount * moveCount> edgeTargetArray;
-    const void doMove(Move move);
-    const int centerMoveHash(Center center, Move move) const;
-    const int edgeMoveHash(Edge edge, Move move) const;
-    const int hash() const;
+    void doMove(Move move);
+    static int centerMoveHash(Center center, Move move);
+    static CenterMove unhashCenter(int hash);
+    static int edgeMoveHash(Edge edge, Move move);
+    long long hash() const;
+    
 };
 
 struct CenterFacePiecesHash {
     std::size_t operator()(const CenterFacePieces& cfp) const {
 
     // Normalize input order without sorting
-    int min_val = std::min({cfp.centers[0], cfp.centers[1], cfp.centers[2]});
-    int max_val = std::max({cfp.centers[0], cfp.centers[1], cfp.centers[2]});
-    int mid_val = cfp.centers[0] ^ cfp.centers[1] ^ cfp.centers[2] ^ min_val ^ max_val;  // XOR trick to find the middle
-
+    int min_center_val = std::min({cfp.centers[0], cfp.centers[1], cfp.centers[2]});
+    int max_center_val = std::max({cfp.centers[0], cfp.centers[1], cfp.centers[2]});
+    int mid_center_val = cfp.centers[0] ^ cfp.centers[1] ^ cfp.centers[2] ^ min_center_val ^ max_center_val;  // XOR trick to find the middle
+    int min_edge_val = std::min({cfp.edges[0], cfp.edges[1], cfp.edges[2]});
+    int max_edge_val = std::max({cfp.edges[0], cfp.edges[1], cfp.edges[2]});
+    int mid_edge_val = cfp.edges[0] ^ cfp.edges[1] ^ cfp.edges[2] ^ min_edge_val ^ max_edge_val;  // XOR trick to find the middle
     // Compute a unique hash based on combination formula
-    int hash = min_val;  // 276 = C(23, 2)
-    hash = (hash << 8) + mid_val;
-    hash = (hash << 8) + max_val;
+    int hash = min_center_val;  // 276 = C(23, 2)
+    hash = (hash << 8) + mid_center_val;
+    hash = (hash << 8) + max_center_val;
+    hash = (hash << 8) + min_edge_val;
+    hash = (hash << 8) + mid_edge_val;
+    hash = (hash << 8) + max_edge_val;
 
 
     // return hash;
-    if (cfp.edges[1] - cfp.edges[0] != 1) {
+    if ((cfp.edges[0] < cfp.edges[1] < cfp.edges[2]) || (cfp.edges[1] < cfp.edges[2] < cfp.edges[0]) || (cfp.edges[2] < cfp.edges[0] < cfp.edges[1])) {
         hash = -hash;
     }
 
@@ -114,13 +140,36 @@ struct Cubestate {
                        CornerPiece{DFRT, ORIENTED}, CornerPiece{DTNB, ORIENTED}};
 };
 
-const std::string_view center_to_string(enum Center center);
+struct Scramble {
+    CenterFacePieces state;
+    std::vector<Move> scramble{};
+    void doMove(Move move) {
+        state.doMove(move);
+        scramble.push_back(move);
+    }
+    bool operator==(const Scramble& other) const {
+        return state.hash() == other.state.hash();
+    }
+};
 
-const std::string_view edge_to_string(enum Edge edge);
+struct ScrambleHash {
+    std::size_t operator()(const Scramble& item) const {
+        return item.state.hash();
+    }
+};
 
-const std::string_view face_to_string(enum Face face);
+struct DoubleMoveList {
+    MoveList &scrambledScramble;
+    MoveList &solvedScramble;
+};
 
-const std::string_view corner_to_string(enum Corner corner);
+std::string_view center_to_string(enum Center center);
+
+std::string_view edge_to_string(enum Edge edge);
+
+std::string_view face_to_string(enum Face face);
+
+std::string_view corner_to_string(enum Corner corner);
 
 class Octominx {
   private:
@@ -128,88 +177,7 @@ class Octominx {
     // Template function to cycle three pieces
     template <typename T, typename IndexType, std::size_t N>
     void cycleThree(std::array<T, N> &arr, std::array<IndexType, 3> indices, Direction direction);
-    constexpr bool flipNextOrientation(Corner pos, Move move) {
-        // Handle corner orientations when doing a move if needed, I barely know how this works
-        // White pieces on the top face are oriented if the white sticker is facing up, they are
-        // unoriented if the white sticker is not facing up White pieces on the bottom face are
-        // oriented if the white sticker is on the right, else they are unoriented if the white
-        // sticker is on the left Yellow pieces on the bottom face are oriented if the yellow
-        // sticker is facing down, they are unoriented if the yellow sticker is not facing down
-        // Yellow pieces on the top face are oriented if the yellow sticker is on the right, else
-        // they are unoriented if the yellow sticker is on the left
-        if ((pos == ULBN) or (pos == UBRT) or (pos == URLF)) {
-            if (move.direction == CW) {
-                switch (pos) {
-                case URLF: {
-                    return (move.face == R) ? (true) : (false);
-                }
-                case ULBN: {
-                    return (move.face == L) ? (true) : (false);
-                }
-                case UBRT: {
-                    return (move.face == B) ? (true) : (false);
-                }
-                case DNFL:
-                case DFRT:
-                case DTNB:
-                    break;
-                }
-            } else {
-                switch (pos) {
-                case URLF: {
-                    return (move.face == R || move.face == L || move.face == F) ? (true) : (false);
-                }
-                case ULBN: {
-                    return (move.face == L || move.face == B || move.face == N) ? (true) : (false);
-                }
-                case UBRT: {
-                    return (move.face == B || move.face == R || move.face == T) ? (true) : (false);
-                }
-                case DNFL:
-                case DFRT:
-                case DTNB:
-                    break;
-                }
-            }
-        }
-
-        else if ((pos == DNFL) or (pos == DFRT) or (pos == DTNB)) {
-            if (move.direction == CCW) {
-                switch (pos) {
-                case DNFL: {
-                    return (move.face == F) ? (true) : (false);
-                }
-                case DFRT: {
-                    return (move.face == R) ? (true) : (false);
-                }
-                case DTNB: {
-                    return (move.face == N) ? (true) : (false);
-                }
-                case URLF:
-                case ULBN:
-                case UBRT:
-                    break;
-                }
-            } else {
-                switch (pos) {
-                case DNFL: {
-                    return (move.face == N || move.face == F || move.face == L) ? (true) : (false);
-                }
-                case DFRT: {
-                    return (move.face == F || move.face == R || move.face == T) ? (true) : (false);
-                }
-                case DTNB: {
-                    return (move.face == T || move.face == N || move.face == B) ? (true) : (false);
-                }
-                case URLF:
-                case ULBN:
-                case UBRT:
-                    break;
-                }
-            }
-        }
-        return false;
-    }
+    static bool flipNextOrientation (const Corner pos, const Move move);
     // Method to cycle three pieces (either centers or edges)
     template <typename IndexType>
     void cycleThreePieces(PieceType piecetype, std::array<IndexType, 3> indices,
@@ -218,6 +186,10 @@ class Octominx {
     void cycleCenterAdj(Move move);
     void cycleEdgeSide(Move move);
     void cycleCornerSide(Move move);
+    const std::vector<Scramble> scrambleArrayInitialIter(const Scramble& scramble);
+    const std::vector<Scramble> solvedArrayInitialIter(const std::vector<Scramble>& scramble);
+    void ArrayNextIter(std::vector<Scramble> &scrambleArray);
+    std::vector<std::pair<MoveList, MoveList>> findTwoSameScrambles(const std::vector<Scramble> &scrambleArray, const std::vector<Scramble> &solveArray);
 
   public:
     Octominx() = default;
@@ -228,18 +200,19 @@ class Octominx {
     static const CenterArray centerSideArray, centerAdjArray1, centerAdjArray2;
     static const EdgeArray edgeSideArray;
     static const CornerArray cornerSideArray;
+    static const std::array<Scramble, 4> solvedStates;
     Cubestate getCubestate() const { return cubestate; };
     Corners getCorners() const { return cubestate.corners; };
     Edges getEdges() const { return cubestate.edges; };
     Centers getCenters() const { return cubestate.centers; };
 
-    void doMove(Move move) {
+    void doMove(const Move move) {
         cycleCenterSide(move);
         cycleCenterAdj(move);
         cycleEdgeSide(move);
         cycleCornerSide(move);
     };
-    std::string_view findWhiteFaceSolution(int iterations);
+    std::vector<MoveList> findWhiteFaceSolution(int iterations);
 
     friend CenterFacePieces getWhiteFace(const Octominx &octominx);
 };
@@ -249,11 +222,13 @@ std::ostream &operator<<(std::ostream &os, const Center center);
 std::ostream &operator<<(std::ostream &os, const Face face);
 std::ostream &operator<<(std::ostream &os, const Corner corner);
 std::ostream &operator<<(std::ostream &os, const Orientation orientation);
-std::ostream &operator<<(std::ostream &os, const Corners corners);
+std::ostream &operator<<(std::ostream &os, const Corners &corners);
 std::ostream &operator<<(std::ostream &os, const Octominx &octominx);
 std::ostream &operator<<(std::ostream &os, const Direction direction);
 std::ostream &operator<<(std::ostream &os, const Move &move);
 std::ostream &operator<<(std::ostream &os, const CenterFacePieces &solution);
+std::ostream &operator<<(std::ostream &os, const Scramble &scramble);
+std::ostream &operator<<(std::ostream &os, const MoveList &moveList);
 bool operator==(const CenterFacePieces &lhs, const CenterFacePieces &rhs);
 
 #endif

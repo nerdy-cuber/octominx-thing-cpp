@@ -1,9 +1,9 @@
 # Makefile
 
 CXX = clang++
-CXXFLAGS = -g -O0 -Werror
+CXXFLAGS = -O2 -Werror
 TARGET = main
-SRCS = main.cpp octominx.cpp lookup_tables.cpp
+SRCS = main.cpp octominx.cpp lookup_tables.cpp findWhiteFaceSolution.cpp intToMove.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 all: $(TARGET)

@@ -1,8 +1,12 @@
 #include "octominx.h"
+#include <cassert>
 #include <memory>
+#include <utility>
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <unordered_set>
+
 
 MoveList reverseMoves(const std::vector<Move> &moveList) {
     std::vector<Move> reversed = moveList; // Copy the vector
@@ -56,27 +60,26 @@ MoveList reverseMoves(const std::vector<Move> &moveList) {
 //}
 
 
-const std::vector<std::unique_ptr<Scramble>> Octominx::scrambleArrayInitialIter(const std::unique_ptr<Scramble>& scramble) {
-    std::vector<std::unique_ptr<Scramble>> newScrambleWhiteCenters = {}; // fill first iteration
+const std::vector<Scramble> Octominx::scrambleArrayInitialIter(const Scramble& scramble) {
+    std::vector<Scramble> newScrambleWhiteCenters = {}; // fill first iteration
     for (Move move: moves) {
-        Scramble newState = *scramble;
+        Scramble newState = scramble;
 //        if (move == Move(U, CCW)) {
 //        std::cout << "scramble: " << newState << "\n";
-//        }
         newState.doMove(move);
 //        if (move == Move(U, CCW)) {
 //        std::f << "scramble after move: " << newState << "\n";
 //        }
-        newScrambleWhiteCenters.push_back(std::make_unique<Scramble>(newState));
+        newScrambleWhiteCenters.push_back(newState);
     }
     return newScrambleWhiteCenters;
 }
 
-const std::vector<std::unique_ptr<Scramble>> Octominx::solvedArrayInitialIter(const std::vector<std::unique_ptr<Scramble>>& scrambleArray) {
-    std::vector<std::unique_ptr<Scramble>> newSolvedWhiteCenters = {};
-    for (const std::unique_ptr<Scramble>& state: scrambleArray) {
+const std::vector<Scramble> Octominx::solvedArrayInitialIter(const std::vector<Scramble>& scrambleArray) {
+    std::vector<Scramble> newSolvedWhiteCenters = {};
+    for (const Scramble& state: scrambleArray) {
         for (Move move: moves) {
-            Scramble newState = *state;
+            Scramble newState = state;
 //            if (move == Move(R, CCW)) {
 //            	std::cout << "solved: " << newState << "\n";
 //            }
@@ -84,59 +87,71 @@ const std::vector<std::unique_ptr<Scramble>> Octominx::solvedArrayInitialIter(co
 //            if (move == Move(R, CCW)) {
 //            std::cout << "solved after move: " << newState << "\n";
 //            }
-            newSolvedWhiteCenters.push_back(std::make_unique<Scramble>(newState));
+            newSolvedWhiteCenters.push_back(Scramble(newState));
         }
     }
     return newSolvedWhiteCenters;
 }
 
-void Octominx::ArrayNextIter(std::vector<std::unique_ptr<Scramble>> &scrambleArray) {
-    std::vector<std::unique_ptr<Scramble>> newScrambleArray = {};
+void Octominx::ArrayNextIter(std::vector<Scramble> &scrambleArray) {
+    std::vector<Scramble> newScrambleArray = {};
 
-    for (const std::unique_ptr<Scramble> &state: scrambleArray) {
+    for (const Scramble &state: scrambleArray) {
+//        std::cout << *state << std::endl;
         for (Move move: moves) {
-            if (state->scramble.back().face == move.face) {
+            if (state.scramble.back().face == move.face) {
                 continue;
             }
-            Scramble newState = *state;
+            Scramble newState = state;
             newState.doMove(move);
-            newScrambleArray.push_back(std::make_unique<Scramble>(newState));
+            newScrambleArray.push_back(newState);
         }
     }
-	scrambleArray = std::move(newScrambleArray);
+	scrambleArray = newScrambleArray;
 }
 
-std::vector<DoubleMoveList> Octominx::findTwoSameScrambles(const std::vector<std::unique_ptr<Scramble>> &scrambleArray, const std::vector<std::unique_ptr<Scramble>> &solveArray) {
-//    std::ofstream outFile("output.txt");
-    std::vector<DoubleMoveList> res{};
-    for (const std::unique_ptr<Scramble> &scrambleState: scrambleArray) {
-        for (const std::unique_ptr<Scramble> &solveState: solveArray) {
-//            std::cout << *scrambleState << "\n";
-//            std::cout << *solveState << "\n";
-            if (scrambleState->state.hash() == solveState->state.hash()) {
-//                std::cout << scrambleState->state.hash() << "\n";
-//                std::cout << solveState->state.hash() << "\n";
-//
-//				if (outFile.is_open()) {
-//                    outFile << scrambleState->scramble << " " << scrambleState->state << " " << solveState->scramble << " " << solveState->state << "\n";
-//				}
-                res.push_back(DoubleMoveList{scrambleState->scramble, solveState->scramble});
-            }
+std::vector<std::pair<MoveList, MoveList>> Octominx::findTwoSameScrambles(const std::vector<Scramble> &scrambleArray, const std::vector<Scramble> &solveArray) {
+	// auto start = std::chrono::system_clock::now();
+    std::unordered_set<Scramble, ScrambleHash> set(scrambleArray.begin(), scrambleArray.end());
+    // std::ofstream outFile("output.txt");
+    std::vector<std::pair<MoveList, MoveList>> res{};
+    for (const Scramble& scramble : solveArray) {
+        auto it = set.find(scramble);
+        if (it != set.end()) {
+            res.push_back(std::make_pair(it->scramble, scramble.scramble));
         }
     }
+//     for (const Scramble &scrambleState: scrambleArray) {
+//         for (const Scramble &solveState: solveArray) {
+// //            std::cout << *scrambleState << "\n";
+// //            std::cout << *solveState << "\n";
+//             if (scrambleState->state.hash() == solveState->state.hash()) {
+// //                std::cout << scrambleState->state.hash() << "\n";
+// //                std::cout << solveState->state.hash() << "\n";
+// //
+// 				if (outFile.is_open()) {
+//                     outFile << scrambleState->scramble << " " << scrambleState->state << " " << solveState->scramble << " " << solveState->state << "\n";
+// 				}
+//                 res.push_back(DoubleMoveList{scrambleState->scramble, solveState->scramble});
+//             }
+//         }
+//     }
+    // auto end = std::chrono::system_clock::now();
+    // std::cout << "time taken for findTwoSameScramles with arrays size:" << scrambleArray.size() << " and " << solveArray.size() << " " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << " seconds\n";
     return res;
 }
 
 
 
 std::vector<MoveList> Octominx::findWhiteFaceSolution(int iterations) {
+    assert(iterations >= 2);
+    std::vector<MoveList> res{};
 
     Scramble scrambleWhiteCenters = {getWhiteFace(*this), MoveList{}};
-    std::unique_ptr<Scramble> pScrambleWhiteCenters = std::make_unique<Scramble> (scrambleWhiteCenters);
-    std::vector<std::unique_ptr<Scramble>> solvedWhiteCenters = {};
 
+    std::vector<Scramble> solvedWhiteCenters = {};
     for (Scramble state: solvedStates) {
-        solvedWhiteCenters.push_back(std::make_unique<Scramble>(state));
+        solvedWhiteCenters.push_back(state);
     }
 
     // for (const std::unique_ptr<Scramble>& pState : solvedWhiteCenters) {
@@ -147,28 +162,63 @@ std::vector<MoveList> Octominx::findWhiteFaceSolution(int iterations) {
 
 //    std::cout << solvedWhiteCenters.size() << "\n";
 
-    std::vector<std::unique_ptr<Scramble>> scrambleWhiteCentersList = scrambleArrayInitialIter(std::move(pScrambleWhiteCenters));
+    std::vector<Scramble> scrambleWhiteCentersList = scrambleArrayInitialIter(scrambleWhiteCenters);
 //    for (const std::unique_ptr<Scramble> &potatoSlice: potato) {
 //        std::cout << potatoSlice->scramble << std::endl;
 //    }
-    ArrayNextIter(scrambleWhiteCentersList);
 //    std::cout << scrambleWhiteCentersList.size() << std::endl;
-    std::vector<std::unique_ptr<Scramble>> solvedWhiteCentersList = solvedArrayInitialIter(solvedWhiteCenters);
-    ArrayNextIter(solvedWhiteCentersList);
+    std::vector<Scramble> solvedWhiteCentersList = solvedArrayInitialIter(solvedWhiteCenters);
+    auto doubleMoveListList = findTwoSameScrambles(scrambleWhiteCentersList, solvedWhiteCentersList);
+    // for (const Scramble &scrambleState: scrambleWhiteCentersList) {
+    //     std::cout << scrambleState << std::endl;
+    // }
+    // for (const Scramble &scrambleState: solvedWhiteCentersList) {
+    //     std::cout << scrambleState << std::endl;
+    // }
+//    std::cout << scrambleWhiteCentersList.size() << std::endl;
 //    std::cout << solvedWhiteCentersList.size() << std::endl;
-//    std::cout << *solvedWhiteCentersList.back() << std::endl;
-    std::vector<DoubleMoveList> doubleMoveListList = findTwoSameScrambles(scrambleWhiteCentersList, solvedWhiteCentersList);
-////    std::cout << b.scrambledScramble->scramble << " " << reverseMoves(b.solvedScramble->scramble) << "\n";
-    std::vector<MoveList> res{};
-    for (DoubleMoveList &doubleMoveList: doubleMoveListList) {
-        MoveList solution = std::move(doubleMoveList.scrambledScramble);
-        doubleMoveList.solvedScramble = reverseMoves(doubleMoveList.solvedScramble);
-        solution.insert(solution.end(), std::make_move_iterator(doubleMoveList.solvedScramble.begin()), std::make_move_iterator(doubleMoveList.solvedScramble.end()));
+    for (auto &doubleMoveList: doubleMoveListList) {
+        auto [scrambleMoveList, solvedMoveList] = doubleMoveList;
+        MoveList solution = scrambleMoveList;
+        solvedMoveList = reverseMoves(solvedMoveList);
+//        solution.insert(solution.end(), std::make_move_iterator(doubleMoveList.solvedScramble.begin()), std::make_move_iterator(doubleMoveList.solvedScramble.end()));
+        for (Move move : solvedMoveList) {
+            solution.push_back(move);
+        }
         res.push_back(solution);
     }
+    for (size_t i = 2; i < iterations; i++) {
+        // std::cout << "current iteration: " << i << std::endl;
+
+    	if ((i % 2) == 0 ) {
+            ArrayNextIter(scrambleWhiteCentersList);
+        } else {
+            ArrayNextIter(solvedWhiteCentersList);
+        }
+        // std::cout << "scramble array size: " << scrambleWhiteCentersList.size() << std::endl;
+//        std::cout << "yay" << std::endl;
+        // std::cout << "solved array size: " << solvedWhiteCentersList.size() << std::endl;
+
+        auto solutions = findTwoSameScrambles(scrambleWhiteCentersList, solvedWhiteCentersList);
+        // std::cout << "solutions size: " << solutions.size() << "\n";
+        for (auto &doubleMoveList: solutions) {
+            auto [scrambleMoveList, solvedMoveList] = doubleMoveList;
+            MoveList solution = scrambleMoveList;
+            solvedMoveList = reverseMoves(solvedMoveList);
+    //        solution.insert(solution.end(), std::make_move_iterator(doubleMoveList.solvedScramble.begin()), std::make_move_iterator(doubleMoveList.solvedScramble.end()));
+            for (Move move : solvedMoveList) {
+                solution.push_back(move);
+            }
+            res.push_back(solution);
+    }
+    }
+//    std::cout << solvedWhiteCentersList.size() << std::endl;
+//    std::cout << *solvedWhiteCentersList.back() << std::endl;
+////    std::cout << b.scrambledScramble->scramble << " " << reverseMoves(b.solvedScramble->scramble) << "\n";
 //     std::vector solvedWhiteCentersList = solvedArrayInitialIter(solvedWhiteCenters);
 	return res;
 }
+
 
 //
 //int main() {

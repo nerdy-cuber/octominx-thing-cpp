@@ -1,0 +1,16 @@
+main
+main.o
+octominx.o
+findWhiteFaceSolution.o
+script
+script2
+test
+test.cpp
+editor.xml
+intToMove.o
+lookup_tables.o
+
+output.txt
+.idea/editor.xml
+.vscode/tasks.json
+test.dSYM/Contents/Info.plist

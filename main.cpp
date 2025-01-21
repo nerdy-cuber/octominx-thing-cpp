@@ -16,7 +16,7 @@ std::vector<std::string> splitStringBySpaces(const std::string& str) {
     return words;
 }
 
-auto scrambleToMoves(std::string_view const scramble) {
+MoveList scrambleToMoves(std::string_view const scramble) {
     std::unordered_map<char, Face> faceMap = {{'U', U}, {'L', L}, {'F', F}, {'R', R},
                                               {'B', B}, {'D', D}, {'N', N}, {'T', T}};
     std::unordered_map<char, Direction> directionMap = {{' ', CW}, {'\'', CCW}};
@@ -40,7 +40,7 @@ auto scrambleToMoves(std::string_view const scramble) {
 int main() {
     Octominx octominx;
     // std::cout << octominx << "\n\n";
-    const auto moves = scrambleToMoves("R U R' U'");
+    const auto moves = scrambleToMoves("");
     for (const Move move : moves) {
         // std::cout << move << "\n";
         octominx.doMove(move);
@@ -54,15 +54,13 @@ int main() {
     std::cout << "white center: " << getWhiteFace(octominx) << "\n";
 
     auto start = std::chrono::high_resolution_clock::now();
-    const auto solutions = octominx.findWhiteFaceSolution(0);
+    const auto solutions = octominx.findWhiteFaceSolution(8);
     auto end = std::chrono::high_resolution_clock::now();
-    // for (const auto& solution : solutions) {
-    //     std::cout << "solution: " << solution << "\n";
-    // }
-    std::cout << solutions.size() << "\n";
-    // whiteFaces.hash();
-    // std::cout << "White Face Pieces after second scramble: " << whiteFaces << "\n";
-    std::cout << "Time taken: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() << "ns\n";
 
+    for (const MoveList& solution: solutions) {
+        std::cout << solution << "\n";
+    }
+    std::cout << solutions.size() << "\n";
+    std::cout << "Time taken: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms\n";
     return 0;
 }
